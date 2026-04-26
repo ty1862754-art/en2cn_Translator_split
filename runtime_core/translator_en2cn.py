@@ -322,6 +322,8 @@ for epoch in range(initial_epoch, config['num_epochs']):
 
     # Save full checkpoint after each epoch.
     save_checkpoint(config['checkpoint_file'], model, optimizer, epoch, global_step, epoch_loss, best_loss, loss_history)
+    # Save loss history and curve artifacts after each epoch to track progress.
+    save_loss_artifacts(loss_history, config['loss_history_file'], config['loss_curve_file'])
 
 print(f"<<<<<<< finished train, cost {time.time()-train_start:.4f} seconds")
 
@@ -330,9 +332,7 @@ os.makedirs(os.path.dirname(config['save_file']), exist_ok=True)
 torch.save(model.state_dict(), config['save_file'])
 print(f"Saved final weights to {config['save_file']}")
 
-save_loss_artifacts(loss_history, config['loss_history_file'], config['loss_curve_file'])
-print(f"Saved loss history to {config['loss_history_file']}")
-print(f"Saved loss curve to {config['loss_curve_file']}")
+print(f"Final training artifacts saved to {config['loss_history_file']} and {config['loss_curve_file']}")
 
 
 
