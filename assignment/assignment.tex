@@ -1,0 +1,87 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{xeCJK} 
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+\title{CSE5023：深度学习前沿进展作业 2\\ Transformer 架构及其应用实验报告}
+\author{段伟强 (Weiqiang Duan) \\ 学号：12533582}
+\date{2025年4月26日}
+
+\begin{document}
+
+\maketitle
+
+\section{第一部分：机器翻译任务 (50分)}
+
+\subsection{对 Transformer 架构的思考与理解}
+
+针对作业 1.1 节提出的核心问题，本人的理解如下：
+
+\paragraph{1. 编码器（Encoder）与解码器（Decoder）在结构设计和功能定位上的差异：}
+编码器（Encoder）采用双向注意力机制，其功能定位是“特征提取器”，旨在将源语言序列映射为高维语义表示。解码器（Decoder）则引入了交叉注意力层，用于对齐源语言特征；其功能定位是“生成器”，通过自回归方式产生目标语言。
+
+\paragraph{2. 注意力掩码（Attention Mask）的实现与核心动机：}
+在本实验中，编码器使用 Padding Mask 屏蔽填充位。解码器则额外使用了由下三角矩阵生成的自回归掩码（Causal Mask）。其核心动机是维护因果性，防止模型在预测当前词时“窥探”未来的真实标签，确保训练与推理的一致性。
+
+\paragraph{3. 解码器在训练阶段和推理阶段的工作流程差异：}
+训练阶段采用 Teacher Forcing，解码器可以并行接收完整的目标序列并计算损失；推理阶段则是逐词生成的自回归过程，上一步的输出作为下一步的输入，属于串行计算。
+
+\subsection{模型训练与评估结果}
+
+\paragraph{训练过程：} 本模型在全量数据集上训练了 50 轮。平均损失值（Loss）从初始的 5.4 稳步下降至 \textbf{0.3079}。训练曲线显示模型收敛良好，未出现明显的梯度消失或爆炸。
+
+\paragraph{BLEU 定量指标：}
+在 1817 句独立测试集上的最终评估结果如下：
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+指标项目 & 测量数值 \\
+\midrule
+\textbf{最终测试集 BLEU 分数} & \textbf{0.2121} (21.21\%) \\
+1-gram Precision & 0.5699 \\
+4-gram Precision & 0.0958 \\
+Brevity Penalty (BP) & 0.9889 \\
+Length Ratio & 0.9889 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{翻译输出示例与性能分析}
+
+以下是模型在测试集上的具体表现分析：
+
+\begin{enumerate}
+    \item \textbf{语义对齐示例}：
+    \textit{Ref: 她在浴室。$\rightarrow$ Pred: 她在洗澡。} \\
+    分析：虽然词汇不完全一致，但模型准确捕捉到了场景的语义关联，展示了较强的泛化能力。
+    
+    \item \textbf{复杂逻辑理解}：
+    \textit{Ref: 他聪明到不会娶她。$\rightarrow$ Pred: 他不会傻到去娶她。} \\
+    分析：这是一个非常成功的案例。模型不仅理解了否定逻辑，还使用了“傻”这个词与原文的“聪明”形成逻辑对冲，说明模型学习到了深层意图。
+    
+    \item \textbf{典型失效案例（极性反转）}：
+    \textit{Ref: 这是我最差劲的电影。$\rightarrow$ Pred: 这是我见过最好的电影响。} \\
+    分析：模型将“最差”识别成了“最好”。这揭示了 NMT 模型在处理情感极性相反但上下文语境相似的形容词时，仍存在识别难度。
+    
+    \item \textbf{幻觉现象分析}：
+    \textit{Ref: 人是唯一会使用火的动物。$\rightarrow$ Pred: 人类是唯一能够彼此交动物的动物。} \\
+    分析：当面对复杂的陈述句时，模型出现了语序混乱和词汇堆砌，这表明在有限的训练数据下，模型对复杂常识性句子的拟合仍有待加强。
+\end{enumerate}
+
+\section{第二部分：情感分析任务 (30分)}
+(该部分实验正在进行中。初步计划加载翻译任务的编码器参数，通过冻结部分卷积层实现微调，预期能利用翻译任务学到的语义特征加速分类任务的收敛。)
+
+\section{第三部分：视觉 Transformer (20分)}
+(该部分计划对比 ViT 与 ResNet50 在图像识别上的表现。Transformer 架构的全局注意力机制在处理图像分块的关联性上具有独特优势。)
+
+\end{document}

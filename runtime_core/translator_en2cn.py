@@ -13,6 +13,8 @@ import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import jieba
+from nltk.translate.bleu_score import corpus_bleu
 
 import warnings
 warnings.filterwarnings('ignore') # Filtering warnings
@@ -50,7 +52,7 @@ def get_config(debug=True):
         return{
             'lr': 1e-4,
             'batch_size': 64,
-            'num_epochs': 30,
+            'num_epochs': 50,
             'n_layer': 6,
             'h_num': 8,
             'd_model': 256, # Dimensions of the embeddings in the Transformer
@@ -205,47 +207,59 @@ def greedy_decode(model, source, source_mask, tokenizer_tgt, max_len, device):
 # num_examples = 2, two examples per run
 def run_validation(model, data, tokenizer_tgt, max_len, device, print_msg, num_examples=4):
     model.eval() # Setting model to evaluation mode
-    count = 0 # Initializing counter to keep track of how many examples have been processed
-    
     console_width = 80 # Fixed witdh for printed messages
+    
+    all_preds = []
+    all_refs = []
     
     # Creating evaluation loop
     with torch.no_grad(): # Ensuring that no gradients are computed during this process
         for i, batch in enumerate(data.dev_data):
-            count += 1
             encoder_input = batch.src.to(device)
             encoder_mask = batch.src_mask.to(device)
             
             # Ensuring that the batch_size of the validation set is 1
             assert encoder_input.size(0) ==  1, 'Batch size must be 1 for validation.'
             
-            # Applying the 'greedy_decode' function to get the model's output for the source text of the input batch
+            # Applying the 'greedy_decode' function to get the model's output
             model_out = greedy_decode(model, encoder_input, encoder_mask, tokenizer_tgt, max_len, device)
 
-            # Retrieving source and target texts from the batch
-            source_text = " ".join([data.en_index_dict[w] for w in data.dev_en[i]])
-            target_text = " ".join([data.cn_index_dict[w] for w in data.dev_cn[i]])
-
-            # save all in the translation list
-            model_out_text = []
-            # convert id to Chinese, skip 'BOS' 0.
-            print(model_out)
+            # Process predicted IDs to text and then segment for BLEU
+            pred_words = []
             for j in range(1, model_out.size(0)):
                 sym = data.cn_index_dict[model_out[j].item()]
-                if sym != 'EOS':
-                    model_out_text.append(sym)
-                else:
-                    break
-
-            # Printing results
-            print_msg('-'*console_width)
-            print_msg(f'SOURCE: {source_text}')
-            print_msg(f'TARGET: {target_text}')
-            print_msg(f'PREDICTED: {model_out_text}')
+                if sym == 'EOS': break
+                pred_words.append(sym)
             
-            # After two examples, we break the loop
-            if count == num_examples:
-                break
+            pred_sent_str = "".join(pred_words)
+            pred_tokenized = list(jieba.cut(pred_sent_str))
+            all_preds.append(pred_tokenized)
+
+            # Process reference IDs to text and then segment for consistency
+            ref_words = [data.cn_index_dict[w] for w in data.dev_cn[i] if data.cn_index_dict[w] not in ['BOS', 'EOS', 'PAD']]
+            ref_sent_str = "".join(ref_words)
+            ref_tokenized = list(jieba.cut(ref_sent_str))
+            all_refs.append([ref_tokenized])
+
+            # Printing results for first few examples
+            if i < num_examples:
+                source_text = " ".join([data.en_index_dict[w] for w in data.dev_en[i] if data.en_index_dict[w] not in ['BOS', 'EOS', 'PAD']])
+                print_msg('-'*console_width)
+                print_msg(f'SOURCE: {source_text}')
+                print_msg(f'TARGET: {ref_sent_str}')
+                print_msg(f'PREDICTED: {pred_sent_str}')
+    
+    # Calculate corpus-level BLEU
+    # Handle empty case
+    if not all_preds:
+        score = 0.0
+    else:
+        score = corpus_bleu(all_refs, all_preds)
+    
+    print_msg('='*console_width)
+    print_msg(f'>>>> VALIDATION BLEU SCORE: {score:.4f}')
+    print_msg('='*console_width)
+    return score
 
 
 # Training model
@@ -306,7 +320,7 @@ for epoch in range(initial_epoch, config['num_epochs']):
         global_step += 1 # Updating global step count
 
     # to evaluate model performance
-    if epoch % 5 == 0:
+    if epoch > 0 and epoch % 10 == 0:
         run_validation(model, data, data.cn_word_dict, config['seq_len'], device, lambda msg: batch_iterator.write(msg))
 
     epoch_loss = epoch_loss_sum / max(epoch_step_count, 1)
@@ -324,6 +338,12 @@ for epoch in range(initial_epoch, config['num_epochs']):
     save_checkpoint(config['checkpoint_file'], model, optimizer, epoch, global_step, epoch_loss, best_loss, loss_history)
     # Save loss history and curve artifacts after each epoch to track progress.
     save_loss_artifacts(loss_history, config['loss_history_file'], config['loss_curve_file'])
+
+    # Save intermediate models periodically for BLEU evaluation
+    if epoch > 0 and epoch % 10 == 0:
+        intermediate_model_file = os.path.join(os.path.dirname(config['save_file']), f'model_epoch_{epoch:02d}.pt')
+        torch.save(model.state_dict(), intermediate_model_file)
+        print(f"Saved intermediate model for evaluation to {intermediate_model_file}")
 
 print(f"<<<<<<< finished train, cost {time.time()-train_start:.4f} seconds")
 
