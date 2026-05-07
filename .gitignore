@@ -1,0 +1,26 @@
+# === 模型权重（不要提交）===
+*.pt
+save/models/*.pt
+
+# === Python 缓存 ===
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+
+# === Jupyter Notebook ===
+.ipynb_checkpoints/
+
+# === LaTeX 临时文件 ===
+*.aux
+*.log
+*.out
+
+# === 图片（可按需保留或删除）===
+# *.png
+# *.jpg
+# *.gif
+
+# === OS 临时文件 ===
+.DS_Store
+Thumbs.db
