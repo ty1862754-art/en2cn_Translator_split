@@ -1,0 +1,10 @@
+{
+  "experiment_name": "ablation_dmodel_128",
+  "n_layer": 6,
+  "h_num": 8,
+  "d_model": 128,
+  "d_ff": 512,
+  "num_epochs": 50,
+  "final_val_bleu": null,
+  "final_test_bleu": null
+}

@@ -1,0 +1,10 @@
+{
+  "experiment_name": "cosine_warmup_lr1e-4_warm5",
+  "lr_strategy": "cosine_with_warmup",
+  "peak_lr": 0.0001,
+  "warmup_epochs": 5,
+  "num_epochs": 50,
+  "d_model": 256,
+  "final_val_bleu": null,
+  "final_test_bleu": null
+}

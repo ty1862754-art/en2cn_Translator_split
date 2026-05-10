@@ -54,6 +54,21 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x) # Dropout for regularization
 
 
+# Creating the Learnable Positional Encoding
+class LearnablePositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, seq_len: int, dropout: float) -> None:
+        super().__init__()
+        self.d_model = d_model
+        self.seq_len = seq_len
+        self.dropout = nn.Dropout(dropout)
+
+        self.pos_embed = nn.Parameter(torch.randn(1, seq_len, d_model) * 0.02)
+
+    def forward(self, x):
+        x = x + self.pos_embed[:, :x.shape[1], :]
+        return self.dropout(x)
+
 
 # Creating Layer Normalization
 class LayerNormalization(nn.Module):
@@ -313,15 +328,19 @@ class Transformer(nn.Module):
 # Building & Initializing Transformer
 
 # Definin function and its parameter, including model dimension, number of encoder and decoder stacks, heads, etc.
-def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int, tgt_seq_len: int, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048) -> Transformer:
+def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int, tgt_seq_len: int, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048, pe_type: str = 'sinusoidal') -> Transformer:
     
     # Creating Embedding layers
     src_embed = InputEmbeddings(d_model, src_vocab_size) # Source language (Source Vocabulary to 512-dimensional vectors)
     tgt_embed = InputEmbeddings(d_model, tgt_vocab_size) # Target language (Target Vocabulary to 512-dimensional vectors)
     
     # Creating Positional Encoding layers
-    src_pos = PositionalEncoding(d_model, src_seq_len, dropout) # Positional encoding for the source language embeddings
-    tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout) # Positional encoding for the target language embeddings
+    if pe_type == 'learnable':
+        src_pos = LearnablePositionalEncoding(d_model, src_seq_len, dropout)
+        tgt_pos = LearnablePositionalEncoding(d_model, tgt_seq_len, dropout)
+    else:
+        src_pos = PositionalEncoding(d_model, src_seq_len, dropout) # Positional encoding for the source language embeddings
+        tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout) # Positional encoding for the target language embeddings
     
     # Creating EncoderBlocks
     encoder_blocks = [] # Initial list of empty EncoderBlocks

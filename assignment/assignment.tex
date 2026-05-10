@@ -220,6 +220,86 @@ Epoch 40 & 0.2556 & \textbf{0.2620} & 0.2297 & 0.2096 \\
 \paragraph{实验结论：}
 （1）Transformer 层数对性能的影响呈现 U 型曲线：3 层已能取得与 6 层相当甚至略优的翻译质量，在资源受限场景下优先选择减少层数而非其他参数；（2）增加注意力头数需同步增加嵌入维度以保证每个头的子空间大小，否则将损害性能；（3）嵌入维度（d\_model）是影响模型容量最关键的超参数，盲目减半会导致严重的性能瓶颈；（4）计算效率方面，减少层数带来最大的加速收益（+85\%），而调整头数和嵌入维度的影响相对较小。
 
+\subsection{位置嵌入策略对比实验}
+
+\paragraph{实验动机：}
+位置嵌入（Positional Encoding）是 Transformer 架构的核心组件之一，负责为不具备循环或卷积结构的自注意力机制提供序列中 token 的位置信息。原始 Transformer 使用固定频率的正弦/余弦函数（Sinusoidal Positional Encoding）作为位置编码。本实验旨在实现一种可学习的位置嵌入（Learnable Positional Embedding），将其与原有的正弦/余弦编码进行对比，探讨不同位置嵌入策略对翻译性能的影响。
+
+\paragraph{策略原理对比：}
+
+\textbf{正弦/余弦位置编码（Sinusoidal PE）：}使用固定频率的正弦和余弦函数生成位置编码向量：
+\[
+PE_{(pos,2i)} = \sin\left(\frac{pos}{10000^{2i/d_{\text{model}}}}\right), \quad
+PE_{(pos,2i+1)} = \cos\left(\frac{pos}{10000^{2i/d_{\text{model}}}}\right)
+\]
+其优点是无需额外参数、可外推到任意序列长度，且不同位置的编码之间存在确定的相对位置关系。
+
+\textbf{可学习位置嵌入（Learnable PE）：}将位置编码视为一个可训练的参数矩阵 $\mathbf{P} \in \mathbb{R}^{\text{max\_len} \times d_{\text{model}}}$，在训练过程中通过反向传播自动更新。其优点是可以根据任务和数据自适应地调整位置表示，但需要预定义最大序列长度，且增加了模型参数量。
+
+\paragraph{实验设计：}
+保持其他超参数与实验B一致（n\_layer=6, h\_num=8, d\_model=256, d\_ff=1024, peak\_lr=$3\times 10^{-4}$, warmup=5, 50 epoch），仅将位置编码方式从 Sinusoidal PE 替换为 Learnable PE，训练后在同一测试集上进行评估对比：
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+实验名称 & 位置嵌入方式 & 额外参数量 \\
+\midrule
+基线（实验B） & Sinusoidal PE & 0 \\
+可学习PE实验 & Learnable PE & 30,720（60$\times$256$\times$2） \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{训练 Loss 对比：}
+两组实验的损失下降轨迹对比如下：
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+训练轮次 & Sinusoidal PE Loss & Learnable PE Loss \\
+\midrule
+Epoch 0 & 6.39 & 6.63 \\
+Epoch 10 & 1.37 & 1.36 \\
+Epoch 20 & 0.47 & 0.46 \\
+Epoch 30 & 0.19 & 0.19 \\
+Epoch 40 & 0.11 & 0.10 \\
+Epoch 49 & 0.084 & 0.084 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+两组实验的损失下降轨迹几乎完全重合，说明在训练拟合能力上，两种位置嵌入方式并无显著差异。
+
+\paragraph{测试集 BLEU 对比：}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+评估指标 & Sinusoidal PE（基线） & Learnable PE \\
+\midrule
+\textbf{测试集 BLEU} & \textbf{0.2323} & \textbf{0.2180} \\
+1-gram Precision & 0.5962 & 0.5755 \\
+4-gram Precision & 0.1111 & 0.0975 \\
+Brevity Penalty & 0.9672 & 0.9953 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{结果分析：}
+尽管两组实验的训练损失几乎完全一致，但可学习位置嵌入在测试集 BLEU 上反而略低于正弦编码（0.2180 vs 0.2323，相差约 1.43 个百分点）：
+
+\begin{itemize}
+    \item \textbf{过拟合风险}：可学习位置嵌入为模型增加了约 3 万个可训练参数，在训练数据量有限的情况下，这些参数可能过拟合训练集中特定位置模式，损害了泛化能力。相比之下，正弦编码固定的位置关系约束起到了正则化作用。
+    \item \textbf{外推能力}：正弦编码通过连续函数定义位置关系，天然具备向更长序列外推的能力；而可学习嵌入在训练中未出现的位置编码只能依赖随机初始化值，因此在测试集中出现与训练集分布略有不同的句子长度时，表现可能不稳定。
+    \item \textbf{表示冗余}：在 d\_model=256 的设定下，模型已通过词嵌入和注意力机制获得了较强的表示能力，可学习位置嵌入带来的额外自由度并非必需，正弦编码提供的位置偏置已足够模型学习序列中的顺序关系。
+\end{itemize}
+
+\paragraph{实验结论：}
+（1）在中等规模的中英翻译任务中，可学习位置嵌入未能超越传统的正弦/余弦位置编码，测试集 BLEU 反而下降 1.43 个百分点；（2）正弦编码固定的频率模式提供了有效的归纳偏置，起到了隐式正则化的作用，有助于抑制过拟合；（3）可学习位置嵌入更适合数据规模极大、序列模式复杂的场景，在数据量有限的任务中，正弦编码仍是更稳健的选择。
+
 \section{第二部分：情感分析任务 (30分)}
 (该部分实验正在进行中。初步计划加载翻译任务的编码器参数，通过冻结部分卷积层实现微调，预期能利用翻译任务学到的语义特征加速分类任务的收敛。)
 
